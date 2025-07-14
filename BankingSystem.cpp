@@ -1,3 +1,6 @@
+/* ===========================================
+   Banking System - Mini Project
+   ===========================================*/
 
 #include <iostream>
 #include <fstream>
@@ -5,7 +8,7 @@
 #include <string>
 #include <iomanip>
 #include <cstdio>
-#include <conio.h>
+#include <conio.h> // For _getch()
 #include <ctime>
 #include <cstdlib>
 #include <vector>
@@ -13,38 +16,40 @@
 #include <queue>
 #include <stack>
 #include <algorithm>
-#include <windows.h>
-#include <functional>
+#include <windows.h> // For SetConsoleTextAttribute and Sleep
+#include <functional> // For std::function
+#include <limits>     // For numeric_limits
 
 using namespace std;
 
-// Global variables
-int main_exit;
+// Global variables (reduced reliance where possible)
 HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 // Data structures
 map<string, string> accountCredentials;  // Hash table for account credentials
 map<string, string> employeeCredentials; // Hash table for employee credentials
-vector<string> transactionHistory;       // Vector to store transaction history
-queue<string> serviceQueue;              // Queue for customer service
-stack<string> recentTransactions;        // Stack for recent transactions
+vector<string> transactionHistory;       // Vector to store transaction history (all transactions)
+queue<string> serviceQueue;              // Queue for customer service requests
+stack<string> recentTransactions;        // Stack for recent transactions (last 10 shown to user)
 
-// Function prototypes
+// Forward declarations
 void fordelay(int);
-void close(void);
+void close_application(void);
 int main();
-void menu_e();
-void employee();
-void customer();
-void menu_c();
-void displayTitle();
-void loginPage();
-void signupPage();
-void displayInstructions();
-void displayLoadingScreen();
-void setColor(int color);
-void loadCredentials();
-void saveCredentials();
+void showEmployeeMenu();
+void employeeLogin();
+void customerLogin();
+void showCustomerMenu();
+void displayAppTitle();
+void showLoginPage();
+void showSignupPage();
+void showInstructions();
+void showLoadingScreen();
+void setConsoleColor(int color);
+void loadAllCredentials();
+void saveAllCredentials();
+string getSecurePasswordInput();
+string getCurrentDateTime(); // Helper to get current date/time
 
 // Bank Account Class
 class Bank
@@ -65,35 +70,38 @@ private:
         AccountNode *left;
         AccountNode *right;
 
+        // Constructor for AccountNode
         AccountNode(string acc_no, string n, string d, string a,
                     string addr, string ph, string bal, string type,
-                    string date)
+                    string date, string last_trans_date)
             : account_number(acc_no), name(n), dob(d), age(a),
               address(addr), phone(ph), balance(bal), acc_type(type),
-              creation_date(date), last_transaction(date), left(nullptr), right(nullptr) {}
+              creation_date(date), last_transaction(last_trans_date), left(nullptr), right(nullptr) {}
     };
 
-    AccountNode *root;
+    AccountNode *root; // Root of the BST
 
-    AccountNode *insert(AccountNode *node, string acc_no, string n, string d, string a,
-                        string addr, string ph, string bal, string type, string date)
+    // Private helper for inserting into BST
+    AccountNode *insert(AccountNode *node, const string &acc_no, const string &n, const string &d, const string &a,
+                        const string &addr, const string &ph, const string &bal, const string &type, const string &date, const string &last_trans_date)
     {
         if (node == nullptr)
         {
-            return new AccountNode(acc_no, n, d, a, addr, ph, bal, type, date);
+            return new AccountNode(acc_no, n, d, a, addr, ph, bal, type, date, last_trans_date);
         }
         if (acc_no < node->account_number)
         {
-            node->left = insert(node->left, acc_no, n, d, a, addr, ph, bal, type, date);
+            node->left = insert(node->left, acc_no, n, d, a, addr, ph, bal, type, date, last_trans_date);
         }
-        else
+        else if (acc_no > node->account_number) // Added check for greater to avoid duplicates or issues
         {
-            node->right = insert(node->right, acc_no, n, d, a, addr, ph, bal, type, date);
+            node->right = insert(node->right, acc_no, n, d, a, addr, ph, bal, type, date, last_trans_date);
         }
         return node;
     }
 
-    AccountNode *search(AccountNode *node, string acc_no)
+    // Private helper for searching in BST
+    AccountNode *search(AccountNode *node, const string &acc_no)
     {
         if (node == nullptr || node->account_number == acc_no)
         {
@@ -106,6 +114,7 @@ private:
         return search(node->right, acc_no);
     }
 
+    // Private helper for in-order traversal (for display_all)
     void inorder(AccountNode *node)
     {
         if (node != nullptr)
@@ -120,6 +129,7 @@ private:
         }
     }
 
+    // Private helper to deallocate BST memory
     void clearTree(AccountNode *node)
     {
         if (node != nullptr)
@@ -130,56 +140,7 @@ private:
         }
     }
 
-public:
-    Bank() : root(nullptr)
-    {
-        loadAccountsFromFile();
-    }
-
-    ~Bank()
-    {
-        clearTree(root);
-    }
-
-    void loadAccountsFromFile()
-    {
-        ifstream file("Bank_Record.csv");
-        if (!file.is_open())
-            return;
-
-        string line;
-        while (getline(file, line))
-        {
-            vector<string> tokens;
-            string token;
-            size_t pos = 0;
-            while ((pos = line.find(',')) != string::npos)
-            {
-                token = line.substr(0, pos);
-                tokens.push_back(token);
-                line.erase(0, pos + 1);
-            }
-            tokens.push_back(line);
-
-            if (tokens.size() >= 9)
-            {
-                root = insert(root, tokens[0], tokens[1], tokens[2], tokens[3],
-                              tokens[4], tokens[5], tokens[6], tokens[7], tokens[8]);
-            }
-        }
-        file.close();
-    }
-
-    void saveAccountsToFile()
-    {
-        ofstream file("Bank_Record.csv");
-        if (!file.is_open())
-            return;
-
-        saveAccountsToFileHelper(root, file);
-        file.close();
-    }
-
+    // Private helper to save accounts to file (recursive inorder traversal)
     void saveAccountsToFileHelper(AccountNode *node, ofstream &file)
     {
         if (node != nullptr)
@@ -187,75 +148,173 @@ public:
             saveAccountsToFileHelper(node->left, file);
             file << node->account_number << "," << node->name << "," << node->dob << ","
                  << node->age << "," << node->address << "," << node->phone << ","
-                 << node->balance << "," << node->acc_type << "," << node->creation_date << "\n";
+                 << node->balance << "," << node->acc_type << "," << node->creation_date << "," // Added creation date
+                 << node->last_transaction << "\n"; // Added last transaction date
             saveAccountsToFileHelper(node->right, file);
         }
     }
 
-    void read_data();
-    void acc_write();
-    void modify_account();
-    void search_rec();
-    void deposit_withdraw();
-    void display_all();
-    void transfer();
-    void view_transaction_history();
-    void request_service();
-    void process_service_queue();
+public:
+    // Constructor
+    Bank() : root(nullptr)
+    {
+        loadAccountsFromFile();
+    }
+
+    // Destructor
+    ~Bank()
+    {
+        clearTree(root);
+    }
+
+    // Public method to load accounts from CSV
+    void loadAccountsFromFile()
+    {
+        ifstream file("Bank_Record.csv");
+        if (!file.is_open())
+        {
+            // If file doesn't exist, it's fine for first run, just return
+            return;
+        }
+
+        string line;
+        while (getline(file, line))
+        {
+            vector<string> tokens;
+            string token;
+            size_t start = 0;
+            size_t end = line.find(',');
+
+            while (end != string::npos)
+            {
+                tokens.push_back(line.substr(start, end - start));
+                start = end + 1;
+                end = line.find(',', start);
+            }
+            tokens.push_back(line.substr(start, end)); // Add the last token
+
+            if (tokens.size() >= 10) // Changed to 10 to include last_transaction
+            {
+                // Ensure all fields are present
+                root = insert(root, tokens[0], tokens[1], tokens[2], tokens[3],
+                              tokens[4], tokens[5], tokens[6], tokens[7], tokens[8], tokens[9]);
+            }
+        }
+        file.close();
+    }
+
+    // Public method to save accounts to CSV
+    void saveAccountsToFile()
+    {
+        ofstream file("Bank_Record.csv");
+        if (!file.is_open())
+        {
+            setConsoleColor(12);
+            cout << "\n\tError: Could not open Bank_Record.csv for saving accounts.";
+            setConsoleColor(7);
+            return;
+        }
+
+        saveAccountsToFileHelper(root, file);
+        file.close();
+    }
+
+    // Public method to create a new account
+    void createNewAccount();
+    // Public method to modify an existing account
+    void modifyAccountDetails();
+    // Public method to search for an account
+    void searchAccountRecord();
+    // Public method for deposit/withdrawal transactions
+    void handleDepositWithdrawal();
+    // Public method to display all accounts (for employees)
+    void displayAllAccounts();
+    // Public method for fund transfers
+    void performFundTransfer();
+    // Public method to view transaction history
+    void viewTransactionHistory();
+    // Public method for customer to request service
+    void submitServiceRequest();
+    // Public method for employees to process service requests
+    void manageServiceQueue();
 };
 
-// Utility Functions
-void setColor(int color)
+// --- Utility Functions Implementation ---
+
+// A simple delay function (using Sleep for better precision than a busy-wait loop)
+void fordelay(int milliseconds)
+{
+    Sleep(milliseconds);
+}
+
+// Function to safely close the application
+void close_application(void)
+{
+    displayAppTitle();
+    setConsoleColor(12);
+    cout << "\n\n\n\n\t\tThank you for using our banking system!";
+    setConsoleColor(7);
+    cout << "\n\n\t\tProgram is now closing...\n\n";
+    fordelay(2000); // Small delay before exiting
+    exit(0);
+}
+
+// Function to set console text color
+void setConsoleColor(int color)
 {
     SetConsoleTextAttribute(hConsole, color);
 }
 
-void displayTitle()
+// Function to display the main application title
+void displayAppTitle()
 {
-    system("cls");
-    setColor(11);
+    system("cls"); // Clear console screen
+    setConsoleColor(11); // Cyan color
     cout << "\n\n\t\t*********************************************";
-    cout << "\n\t\t*                                           *";
-    cout << "\n\t\t*       WELCOME TO THE BANKING SYSTEM       *";
-    cout << "\n\t\t*                                           *";
+    cout << "\n\t\t* *";
+    cout << "\n\t\t* WELCOME TO THE BANKING SYSTEM       *"; // Generic title
+    cout << "\n\t\t* *";
     cout << "\n\t\t*********************************************\n\n";
-    setColor(7);
+    setConsoleColor(7); // White color
 }
 
-void displayLoadingScreen()
+// Function to display loading animation
+void showLoadingScreen()
 {
     system("cls");
-    setColor(10);
+    setConsoleColor(10); // Green color
     cout << "\n\n\n\n\n\t\t\tLoading";
     for (int i = 0; i < 6; i++)
     {
-        fordelay(100000000);
+        fordelay(200); // Shorter delay for quicker load
         cout << ".";
     }
     system("cls");
 }
 
-void displayInstructions()
+// Function to display important instructions to the user
+void showInstructions()
 {
-    displayTitle();
-    setColor(14);
+    displayAppTitle();
+    setConsoleColor(14); // Yellow color
     cout << "\n\t\tIMPORTANT INSTRUCTIONS:\n";
-    setColor(7);
+    setConsoleColor(7); // White color
     cout << "\n\t1. Keep your account number and password confidential.";
     cout << "\n\t2. Do not share your OTP or password with anyone.";
     cout << "\n\t3. Always log out after completing your transactions.";
-    cout << "\n\t4. Report any suspicious activity to bank immediately.";
+    cout << "\n\t4. Report any suspicious activity to the bank immediately.";
     cout << "\n\t5. Regularly update your password for security.";
     cout << "\n\n\tPress any key to continue...";
-    _getch();
+    _getch(); // Wait for user input
 }
 
-void loginPage()
+// Function to display the login page options
+void showLoginPage()
 {
-    displayTitle();
-    setColor(14);
+    displayAppTitle();
+    setConsoleColor(14); // Yellow color
     cout << "\n\t\tLOGIN PAGE\n";
-    setColor(7);
+    setConsoleColor(7); // White color
     cout << "\n\t1. Employee Login";
     cout << "\n\t2. Customer Login";
     cout << "\n\t3. New Customer Registration";
@@ -264,61 +323,57 @@ void loginPage()
     cout << "\n\n\tEnter your choice: ";
 }
 
-void signupPage()
+// Function to display the signup page title
+void showSignupPage()
 {
-    displayTitle();
-    setColor(14);
+    displayAppTitle();
+    setConsoleColor(14); // Yellow color
     cout << "\n\t\tNEW CUSTOMER REGISTRATION\n";
-    setColor(7);
+    setConsoleColor(7); // White color
 }
 
-void fordelay(int j)
-{
-    for (int i = 0; i < j; i++)
-        ;
-}
-
-string getPasswordInput()
+// Function to get password input securely (masked with asterisks)
+string getSecurePasswordInput()
 {
     string password;
     char ch;
     while (true)
     {
-        ch = _getch();
+        ch = _getch(); // Get character without echoing to console
         if (ch == 13) // Enter key
             break;
-        else if (ch == 8) // Backspace
+        else if (ch == 8) // Backspace key
         {
             if (!password.empty())
             {
-                cout << "\b \b";
+                cout << "\b \b"; // Erase character from console
                 password.pop_back();
             }
         }
-        else if (isprint(ch))
+        else if (isprint(ch)) // Check if printable character
         {
             password.push_back(ch);
-            cout << '*';
+            cout << '*'; // Display asterisk
         }
     }
-    cout << endl;
+    cout << endl; // New line after password input
     return password;
 }
 
-void close(void)
+// Helper function to get current date and time as a string
+string getCurrentDateTime()
 {
-    displayTitle();
-    setColor(12);
-    cout << "\n\n\n\n\t\tThank you for using our banking system!";
-    setColor(7);
-    cout << "\n\n\t\tProgram is now closing...\n\n";
-    exit(0);
+    time_t now = time(0);
+    string dt = ctime(&now);
+    // ctime adds a newline, remove it
+    dt.erase(remove(dt.begin(), dt.end(), '\n'), dt.end());
+    return dt;
 }
 
-// Load and save credentials
-void loadCredentials()
+// Load all credentials from CSV files into maps
+void loadAllCredentials()
 {
-    // Load account credentials
+    // Load account credentials from Account_info.csv
     ifstream accFile("Account_info.csv");
     if (accFile.is_open())
     {
@@ -335,8 +390,9 @@ void loadCredentials()
         }
         accFile.close();
     }
+    // If file doesn't exist, accountCredentials map remains empty, which is fine
 
-    // Load employee credentials
+    // Load employee credentials from Employee_info.csv
     ifstream empFile("Employee_info.csv");
     if (empFile.is_open())
     {
@@ -355,15 +411,16 @@ void loadCredentials()
     }
     else
     {
-        // Create default admin if file doesn't exist
+        // Create a default admin if Employee_info.csv does not exist
         employeeCredentials["admin"] = "admin123";
-        saveCredentials();
+        saveAllCredentials(); // Save this default admin to the file
     }
 }
 
-void saveCredentials()
+// Save all credentials from maps to CSV files
+void saveAllCredentials()
 {
-    // Save employee credentials
+    // Save employee credentials to Employee_info.csv
     ofstream empFile("Employee_info.csv");
     if (empFile.is_open())
     {
@@ -373,241 +430,152 @@ void saveCredentials()
         }
         empFile.close();
     }
-}
-
-// Bank Class Member Functions
-void Bank::read_data()
-{
-    int x, i = 0;
-    string account_number, name, dob, age, address, phone, depo, acc_type, date, password;
-
-Retry:
-    displayTitle();
-    cout << "\n\t\tACCOUNT CREATION\n";
-    cout << "\n\tEnter Account Number: ";
-    cin >> account_number;
-
-    if (accountCredentials.find(account_number) != accountCredentials.end())
-    {
-        cout << "\n\tAccount No. Matches with Existing Account!";
-        cout << "\n\t1. Try Again!\n\t2. Login To Account\n\tChoice: ";
-        cin >> x;
-        if (x == 1)
-            goto Retry;
-        else
-            customer();
-    }
-
-    cout << "\n\tEnter Name: ";
-    cin.ignore();
-    getline(cin, name);
-
-    cout << "\n\tEnter Date of Birth (mm/dd/yyyy): ";
-    cin >> dob;
-
-    cout << "\n\tEnter Age: ";
-    cin >> age;
-
-    cout << "\n\tEnter Address: ";
-    cin.ignore();
-    getline(cin, address);
-
-    cout << "\n\tEnter Phone Number: ";
-    cin >> phone;
-
-    cout << "\n\tDo you want to deposit amount?\n\t1. Yes\n\t2. No\n\tChoice: ";
-    cin >> x;
-    if (x == 1)
-    {
-        cout << "\n\tEnter the amount to deposit: Rs ";
-        cin >> depo;
-    }
     else
     {
-        depo = "0";
+        setConsoleColor(12);
+        cout << "\n\tError: Could not open Employee_info.csv for saving credentials.";
+        setConsoleColor(7);
     }
 
-    cout << "\n\tType of account:\n\t1. Saving\n\t2. Current\n\tChoice: ";
-    cin >> x;
-    acc_type = (x == 1) ? "Saving" : "Current";
-
-    time_t now = time(0);
-    string dt = ctime(&now);
-    date = dt;
-
-    cout << "\n\tEnter Password For Your Account: ";
-    password = getPasswordInput();
-
-    // Add to credentials map
-    accountCredentials[account_number] = password;
-
-    // Save to the file immediately
-    ofstream accFile("Account_info.csv", ios::app);
+    // Save account credentials to Account_info.csv
+    ofstream accFile("Account_info.csv");
     if (accFile.is_open())
     {
-        accFile << account_number << "," << password << "\n";
+        for (const auto &pair : accountCredentials)
+        {
+            accFile << pair.first << "," << pair.second << "\n";
+        }
         accFile.close();
-    }
-
-    setColor(10);
-    cout << "\n\tAccount created successfully!";
-    setColor(7);
-
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_c();
     }
     else
     {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
+        setConsoleColor(12);
+        cout << "\n\tError: Could not open Account_info.csv for saving credentials.";
+        setConsoleColor(7);
     }
 }
 
-void Bank::acc_write()
+
+// --- Bank Class Member Functions Implementation ---
+
+// Function to create a new customer account
+void Bank::createNewAccount()
 {
-    string account_number, name, dob, age, address, phone, depo, acc_type, date, password;
+    string account_number, name, dob, age, address, phone, deposit_amount_str, acc_type, password;
+    int choice_int;
+    bool accountExists;
 
-    displayTitle();
-    cout << "\n\t\tACCOUNT CREATION\n";
-    cout << "\n\tEnter Account Number: ";
-    cin >> account_number;
+    do {
+        displayAppTitle();
+        cout << "\n\t\tACCOUNT CREATION\n";
+        cout << "\n\tEnter Account Number: ";
+        cin >> account_number;
 
-    if (accountCredentials.find(account_number) != accountCredentials.end())
-    {
-        cout << "\n\tAccount No. Matches with Existing Account!";
-        cout << "\n\t1. Try Again!\n\t2. Login To Account\n\tChoice: ";
-        int x;
-        cin >> x;
-        if (x == 1)
-            acc_write();
-        else
-            customer();
-        return;
-    }
+        accountExists = (accountCredentials.find(account_number) != accountCredentials.end());
+
+        if (accountExists)
+        {
+            setConsoleColor(12);
+            cout << "\n\tAccount No. " << account_number << " already exists!";
+            setConsoleColor(7);
+            cout << "\n\t1. Try a different Account Number\n\t2. Login To Existing Account\n\tChoice: ";
+            cin >> choice_int;
+            if (choice_int == 2) {
+                customerLogin(); // Go to customer login
+                return; // Exit this function
+            }
+        }
+    } while (accountExists && choice_int == 1); // Loop if account exists and user wants to try again
+
+    // Clear input buffer after reading account number
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     cout << "\n\tEnter Name: ";
-    cin.ignore();
     getline(cin, name);
 
-    cout << "\n\tEnter Date of Birth (mm/dd/yyyy): ";
-    cin >> dob;
+    cout << "\n\tEnter Date of Birth (DD/MM/YYYY): "; // Changed format for clarity
+    getline(cin, dob); // Use getline for full date string
 
     cout << "\n\tEnter Age: ";
     cin >> age;
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear buffer
 
-    cout << "\n\tEnter Address: ";
-    cin.ignore();
+    cout << "\n\tEnter Address (single line): ";
     getline(cin, address);
 
     cout << "\n\tEnter Phone Number: ";
     cin >> phone;
 
-    int x;
-    cout << "\n\tDo you want to deposit amount?\n\t1. Yes\n\t2. No\n\tChoice: ";
-    cin >> x;
-    if (x == 1)
+    cout << "\n\tWould you like to make an initial deposit?\n\t1. Yes\n\t2. No\n\tChoice: ";
+    cin >> choice_int;
+    if (choice_int == 1)
     {
+        float depo_val;
         cout << "\n\tEnter the amount to deposit: Rs ";
-        cin >> depo;
+        while (!(cin >> depo_val) || depo_val < 0) {
+            setConsoleColor(12);
+            cout << "\n\tInvalid amount. Please enter a non-negative number: Rs ";
+            setConsoleColor(7);
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+        deposit_amount_str = to_string(depo_val);
     }
     else
     {
-        depo = "0";
+        deposit_amount_str = "0.0"; // Initialize with 0.0 for consistency
     }
 
-    cout << "\n\tType of account:\n\t1. Saving\n\t2. Current\n\tChoice: ";
-    cin >> x;
-    acc_type = (x == 1) ? "Saving" : "Current";
+    cout << "\n\tSelect Type of Account:\n\t1. Saving\n\t2. Current\n\tChoice: ";
+    cin >> choice_int;
+    acc_type = (choice_int == 1) ? "Saving" : "Current";
 
-    time_t now = time(0);
-    string dt = ctime(&now);
-    date = dt;
+    string creation_date_time = getCurrentDateTime();
 
-    cout << "\n\tEnter Password For Your Account: ";
-    password = getPasswordInput();
+    cout << "\n\tEnter a Password for your Account: ";
+    password = getSecurePasswordInput();
 
-    // Add to credentials map
+    // Add to in-memory credentials map and BST
     accountCredentials[account_number] = password;
+    root = insert(root, account_number, name, dob, age, address, phone, deposit_amount_str, acc_type, creation_date_time, creation_date_time);
 
-    ofstream MyFile1, MyFile2;
-    MyFile1.open("Bank_Record.csv", ios::out | ios::app);
-    MyFile1 << account_number << "," << name << "," << dob << ","
-            << age << "," << address << "," << phone << "," << depo
-            << "," << acc_type << "," << date << "\n";
-    MyFile1.close();
+    // Save all changes to files
+    saveAllCredentials(); // Save updated account credentials
+    saveAccountsToFile(); // Save updated bank records
 
-    MyFile2.open("Account_info.csv", ios::out | ios::app);
-    MyFile2 << account_number << "," << password << "\n";
-    MyFile2.close();
-
-    // Add to BST
-    root = insert(root, account_number, name, dob, age, address, phone, depo, acc_type, date);
-
-    setColor(10);
+    setConsoleColor(10); // Green color
     cout << "\n\tAccount created successfully!";
-    setColor(7);
+    cout << "\n\tAccount Number: " << account_number;
+    cout << "\n\tInitial Balance: Rs " << deposit_amount_str;
+    setConsoleColor(7);
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
-    }
+    cout << "\n\n\tPress any key to return to Main Menu...";
+    _getch();
+    main(); // Return to main menu
 }
 
-void Bank::modify_account()
+
+void Bank::modifyAccountDetails()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tACCOUNT MODIFICATION\n";
 
     string acc_no;
-    cout << "\n\tEnter the Account Number: ";
+    cout << "\n\tEnter the Account Number to modify: ";
     cin >> acc_no;
 
     AccountNode *account = search(root, acc_no);
     if (account == nullptr)
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tAccount Doesn't Exist!";
-        setColor(7);
+        setConsoleColor(7);
     }
     else
     {
-        setColor(11);
+        setConsoleColor(11); // Cyan
         cout << "\n\tAccount Found! Current Details:";
-        setColor(7);
+        setConsoleColor(7); // White
         cout << "\n\tAccount NO.: " << account->account_number;
         cout << "\n\tName: " << account->name;
         cout << "\n\tDOB: " << account->dob;
@@ -616,9 +584,11 @@ void Bank::modify_account()
         cout << "\n\tPhone number: " << account->phone;
         cout << "\n\tType Of Account: " << account->acc_type;
         cout << "\n\tDate of Account creation: " << account->creation_date;
-        cout << "\n\tAmount deposited: " << account->balance;
+        cout << "\n\tAmount deposited: Rs " << account->balance;
+        cout << "\n\tLast Transaction: " << account->last_transaction;
 
         int choice;
+        string newValue;
         do
         {
             cout << "\n\n\tWhat would you like to update?";
@@ -627,107 +597,116 @@ void Bank::modify_account()
             cout << "\n\t3. Age";
             cout << "\n\t4. Address";
             cout << "\n\t5. Phone Number";
-            cout << "\n\t6. Done Updating";
+            cout << "\n\t6. Change Account Password"; // New option
+            cout << "\n\t7. Done Updating"; // Changed from 6 to 7
             cout << "\n\tChoice: ";
             cin >> choice;
+            cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear buffer for getline
 
-            string newValue;
-            cin.ignore();
             switch (choice)
             {
             case 1:
                 cout << "\n\tEnter New Name: ";
                 getline(cin, newValue);
                 account->name = newValue;
+                setConsoleColor(10); cout << "\n\tName updated successfully."; setConsoleColor(7);
                 break;
             case 2:
-                cout << "\n\tEnter New Date of Birth (mm/dd/yyyy): ";
-                cin >> newValue;
+                cout << "\n\tEnter New Date of Birth (DD/MM/YYYY): ";
+                getline(cin, newValue);
                 account->dob = newValue;
+                setConsoleColor(10); cout << "\n\tDate of Birth updated successfully."; setConsoleColor(7);
                 break;
             case 3:
                 cout << "\n\tEnter New Age: ";
                 cin >> newValue;
                 account->age = newValue;
+                setConsoleColor(10); cout << "\n\tAge updated successfully."; setConsoleColor(7);
                 break;
             case 4:
                 cout << "\n\tEnter New Address: ";
                 getline(cin, newValue);
                 account->address = newValue;
+                setConsoleColor(10); cout << "\n\tAddress updated successfully."; setConsoleColor(7);
                 break;
             case 5:
                 cout << "\n\tEnter New Phone Number: ";
                 cin >> newValue;
                 account->phone = newValue;
+                setConsoleColor(10); cout << "\n\tPhone Number updated successfully."; setConsoleColor(7);
                 break;
             case 6:
+                cout << "\n\tEnter New Password: ";
+                newValue = getSecurePasswordInput();
+                accountCredentials[acc_no] = newValue; // Update in credentials map
+                saveAllCredentials(); // Save updated credentials
+                setConsoleColor(10); cout << "\n\tPassword updated successfully."; setConsoleColor(7);
+                break;
+            case 7:
+                setConsoleColor(10);
+                cout << "\n\tFinishing updates...";
+                setConsoleColor(7);
                 break;
             default:
-                setColor(12);
-                cout << "\n\tInvalid Choice!";
-                setColor(7);
+                setConsoleColor(12);
+                cout << "\n\tInvalid Choice! Please try again.";
+                setConsoleColor(7);
+                break;
             }
-        } while (choice != 6);
+            if (choice != 7) {
+                cout << "\n\n\tPress any key to continue modifications...";
+                _getch();
+                displayAppTitle();
+                cout << "\n\t\tACCOUNT MODIFICATION\n";
+            }
+        } while (choice != 7);
 
-        // Update the file
-        saveAccountsToFile();
-        setColor(10);
-        cout << "\n\tAccount updated successfully!";
-        setColor(7);
+        saveAccountsToFile(); // Save updated account details to Bank_Record.csv
+        setConsoleColor(10);
+        cout << "\n\tAccount details saved successfully!";
+        setConsoleColor(7);
     }
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showCustomerMenu(); // Assume customer is logged in, or route to main menu if called by employee
 }
 
-void Bank::search_rec()
+
+void Bank::searchAccountRecord()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tACCOUNT SEARCH\n";
 
-    int choice;
+    int search_type_choice;
     cout << "\n\tSearch by:\n\t1. Account Number\n\t2. Name\n\tChoice: ";
-    cin >> choice;
+    while (!(cin >> search_type_choice) || (search_type_choice < 1 || search_type_choice > 2)) {
+        setConsoleColor(12);
+        cout << "\n\tInvalid choice. Please enter 1 or 2: ";
+        setConsoleColor(7);
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear buffer
 
-    if (choice == 1)
+    if (search_type_choice == 1)
     {
         string acc_no;
-        cout << "\n\tEnter Account Number: ";
+        cout << "\n\tEnter Account Number to search: ";
         cin >> acc_no;
 
         AccountNode *account = search(root, acc_no);
         if (account == nullptr)
         {
-            setColor(12);
+            setConsoleColor(12);
             cout << "\n\tAccount Doesn't Exist!";
-            setColor(7);
+            setConsoleColor(7);
         }
         else
         {
-            setColor(11);
-            cout << "\n\tAccount Details:";
-            setColor(7);
+            setConsoleColor(11);
+            cout << "\n\tAccount Details Found:";
+            setConsoleColor(7);
             cout << "\n\tAccount NO.: " << account->account_number;
             cout << "\n\tName: " << account->name;
             cout << "\n\tDOB: " << account->dob;
@@ -737,31 +716,37 @@ void Bank::search_rec()
             cout << "\n\tType Of Account: " << account->acc_type;
             cout << "\n\tDate of Account creation: " << account->creation_date;
             cout << "\n\tBalance: Rs " << account->balance;
+            cout << "\n\tLast Transaction: " << account->last_transaction;
         }
     }
-    else if (choice == 2)
+    else if (search_type_choice == 2)
     {
         string name_search;
-        cout << "\n\tEnter Name: ";
-        cin.ignore();
+        cout << "\n\tEnter Name (or part of name) to search: ";
         getline(cin, name_search);
 
-        // Search by name in the BST
         bool found = false;
-        function<void(AccountNode *)> searchByName = [&](AccountNode *node)
+        // Lambda function for in-order traversal to search by name
+        function<void(AccountNode *)> searchByNameTraversal = [&](AccountNode *node)
         {
             if (node == nullptr)
                 return;
 
-            searchByName(node->left);
+            searchByNameTraversal(node->left);
 
-            if (node->name.find(name_search) != string::npos)
+            // Case-insensitive search for name
+            string node_name_lower = node->name;
+            string search_name_lower = name_search;
+            transform(node_name_lower.begin(), node_name_lower.end(), node_name_lower.begin(), ::tolower);
+            transform(search_name_lower.begin(), search_name_lower.end(), search_name_lower.begin(), ::tolower);
+
+            if (node_name_lower.find(search_name_lower) != string::npos)
             {
                 if (!found)
                 {
-                    setColor(11);
-                    cout << "\n\tAccounts Found:";
-                    setColor(7);
+                    setConsoleColor(11);
+                    cout << "\n\tAccounts Found (matching '" << name_search << "'):";
+                    setConsoleColor(7);
                     found = true;
                 }
 
@@ -769,56 +754,39 @@ void Bank::search_rec()
                 cout << "\n\tName: " << node->name;
                 cout << "\n\tType Of Account: " << node->acc_type;
                 cout << "\n\tBalance: Rs " << node->balance;
+                cout << "\n\tLast Transaction: " << node->last_transaction;
                 cout << "\n\t---------------------------";
             }
 
-            searchByName(node->right);
+            searchByNameTraversal(node->right);
         };
 
-        searchByName(root);
+        searchByNameTraversal(root);
 
         if (!found)
         {
-            setColor(12);
-            cout << "\n\tNo accounts with that name were found!";
-            setColor(7);
+            setConsoleColor(12);
+            cout << "\n\tNo accounts with that name (or matching part) were found!";
+            setConsoleColor(7);
         }
     }
-    else
-    {
-        setColor(12);
-        cout << "\n\tInvalid Choice!";
-        setColor(7);
-    }
 
-    int choice2;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice2;
-
-    if (choice2 == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice2 == 0)
-    {
-        close();
-    }
-    else if (choice2 == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    // Decide which menu to return to based on context (e.g., employee or customer)
+    // For simplicity, let's assume this is called from customer menu, or main menu for employee
+    // You might want to pass a flag to this function to decide where to return
+    if (cin.peek() == EOF) { // Simple check if EOF implies called from employee context
+         showEmployeeMenu();
+    } else {
+        showCustomerMenu();
     }
 }
 
-void Bank::deposit_withdraw()
+
+void Bank::handleDepositWithdrawal()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tTRANSACTIONS\n";
 
     string acc_no;
@@ -828,231 +796,181 @@ void Bank::deposit_withdraw()
     AccountNode *account = search(root, acc_no);
     if (account == nullptr)
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tAccount Doesn't Exist!";
-        setColor(7);
+        setConsoleColor(7);
     }
     else
     {
-        setColor(11);
+        setConsoleColor(11);
         cout << "\n\tAccount Details:";
-        setColor(7);
+        setConsoleColor(7);
         cout << "\n\tAccount NO.: " << account->account_number;
         cout << "\n\tName: " << account->name;
         cout << "\n\tCurrent Balance: Rs " << account->balance;
 
-        int choice;
+        int transaction_type_choice;
         cout << "\n\n\t1. Deposit\n\t2. Withdraw\n\tChoice: ";
-        cin >> choice;
-
-        if (choice == 1)
-        {
-            float amount;
-            cout << "\n\tEnter Amount to Deposit: Rs ";
-            cin >> amount;
-
-            float current = stof(account->balance);
-            current += amount;
-            account->balance = to_string(current);
-
-            // Record transaction
-            string trans = "Deposit: +Rs " + to_string(amount) + " to " + acc_no;
-            transactionHistory.push_back(trans);
-            recentTransactions.push(trans);
-
-            // Update last transaction date
-            time_t now = time(0);
-            account->last_transaction = ctime(&now);
-
-            setColor(10);
-            cout << "\n\tDeposit Successful! New Balance: Rs " << account->balance;
-            setColor(7);
+        while (!(cin >> transaction_type_choice) || (transaction_type_choice < 1 || transaction_type_choice > 2)) {
+            setConsoleColor(12);
+            cout << "\n\tInvalid choice. Please enter 1 or 2: ";
+            setConsoleColor(7);
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
-        else if (choice == 2)
-        {
-            float amount;
-            cout << "\n\tEnter Amount to Withdraw: Rs ";
-            cin >> amount;
 
-            float current = stof(account->balance);
-            if (amount > current)
+        float amount;
+        cout << "\n\tEnter Amount: Rs ";
+        while (!(cin >> amount) || amount <= 0) { // Validate positive amount
+            setConsoleColor(12);
+            cout << "\n\tInvalid amount. Please enter a positive number: Rs ";
+            setConsoleColor(7);
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+
+        float current_balance = stof(account->balance);
+        string transaction_description;
+
+        if (transaction_type_choice == 1) // Deposit
+        {
+            current_balance += amount;
+            transaction_description = "Deposit: +Rs " + to_string(amount) + " to " + acc_no;
+            setConsoleColor(10);
+            cout << "\n\tDeposit Successful!";
+            setConsoleColor(7);
+        }
+        else // Withdraw
+        {
+            if (amount > current_balance)
             {
-                setColor(12);
+                setConsoleColor(12);
                 cout << "\n\tInsufficient Balance!";
-                setColor(7);
+                setConsoleColor(7);
+                amount = 0; // Prevent balance change
             }
             else
             {
-                current -= amount;
-                account->balance = to_string(current);
-
-                // Record transaction
-                string trans = "Withdrawal: -Rs " + to_string(amount) + " from " + acc_no;
-                transactionHistory.push_back(trans);
-                recentTransactions.push(trans);
-
-                // Update last transaction date
-                time_t now = time(0);
-                account->last_transaction = ctime(&now);
-
-                setColor(10);
-                cout << "\n\tWithdrawal Successful! New Balance: Rs " << account->balance;
-                setColor(7);
+                current_balance -= amount;
+                transaction_description = "Withdrawal: -Rs " + to_string(amount) + " from " + acc_no;
+                setConsoleColor(10);
+                cout << "\n\tWithdrawal Successful!";
+                setConsoleColor(7);
             }
         }
-        else
-        {
-            setColor(12);
-            cout << "\n\tInvalid Choice!";
-            setColor(7);
+
+        if (amount > 0) { // Only update if a valid transaction occurred
+            account->balance = to_string(current_balance);
+            transactionHistory.push_back(transaction_description);
+            recentTransactions.push(transaction_description);
+
+            // Update last transaction date
+            account->last_transaction = getCurrentDateTime();
+            saveAccountsToFile(); // Save updated balance and last transaction date
+            cout << "\n\tNew Balance: Rs " << account->balance;
         }
-
-        // Update the file
-        saveAccountsToFile();
     }
 
-    int choice2;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice2;
-
-    if (choice2 == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice2 == 0)
-    {
-        close();
-    }
-    else if (choice2 == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showCustomerMenu();
 }
 
-void Bank::display_all()
+
+void Bank::displayAllAccounts()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tALL ACCOUNT HOLDERS\n";
 
-    setColor(14);
-    cout << left
-         << "\n\t" << setw(20) << "Account No."
-         << setw(30) << "Name"
-         << setw(20) << "Type"
-         << setw(15) << "Balance" << "\n";
-    cout << "\t" << string(85, '-') << "\n";
-    setColor(7);
+    if (root == nullptr) {
+        setConsoleColor(12);
+        cout << "\n\tNo accounts to display.";
+        setConsoleColor(7);
+    } else {
+        setConsoleColor(14); // Yellow
+        cout << left
+             << "\n\t" << setw(20) << "Account No."
+             << setw(30) << "Name"
+             << setw(20) << "Type"
+             << setw(15) << "Balance" << "\n";
+        cout << "\t" << string(85, '-') << "\n";
+        setConsoleColor(7); // White
 
-    inorder(root);
+        inorder(root); // Perform in-order traversal to display accounts
+    }
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
 
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_e();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_e();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showEmployeeMenu(); // Return to employee menu
 }
 
-void Bank::transfer()
+
+void Bank::performFundTransfer()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tFUND TRANSFER\n";
 
-    string from_acc, to_acc;
-    cout << "\n\tEnter Your Account Number: ";
-    cin >> from_acc;
+    string from_acc_no, to_acc_no;
+    float amount;
 
-    AccountNode *from_account = search(root, from_acc);
+    cout << "\n\tEnter Your Account Number (Sender): ";
+    cin >> from_acc_no;
+
+    AccountNode *from_account = search(root, from_acc_no);
     if (from_account == nullptr)
     {
-        setColor(12);
-        cout << "\n\tYour Account Doesn't Exist!";
-        setColor(7);
-
-        int choice;
-        cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-        cin >> choice;
-
-        if (choice == 1)
-        {
-            displayLoadingScreen();
-            main();
-        }
-        else if (choice == 0)
-        {
-            close();
-        }
-        else
-        {
-            menu_c();
-        }
+        setConsoleColor(12);
+        cout << "\n\tSender Account Doesn't Exist!";
+        setConsoleColor(7);
+        cout << "\n\n\tPress any key to return to menu...";
+        _getch();
+        showCustomerMenu();
         return;
     }
 
     cout << "\n\tEnter Recipient Account Number: ";
-    cin >> to_acc;
+    cin >> to_acc_no;
 
-    AccountNode *to_account = search(root, to_acc);
+    AccountNode *to_account = search(root, to_acc_no);
     if (to_account == nullptr)
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tRecipient Account Doesn't Exist!";
-        setColor(7);
-
-        int choice;
-        cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-        cin >> choice;
-
-        if (choice == 1)
-        {
-            displayLoadingScreen();
-            main();
-        }
-        else if (choice == 0)
-        {
-            close();
-        }
-        else
-        {
-            menu_c();
-        }
+        setConsoleColor(7);
+        cout << "\n\n\tPress any key to return to menu...";
+        _getch();
+        showCustomerMenu();
         return;
     }
 
-    float amount;
+    // Prevent transferring to the same account
+    if (from_acc_no == to_acc_no) {
+        setConsoleColor(12);
+        cout << "\n\tCannot transfer to the same account!";
+        setConsoleColor(7);
+        cout << "\n\n\tPress any key to return to menu...";
+        _getch();
+        showCustomerMenu();
+        return;
+    }
+
+
     cout << "\n\tEnter Amount to Transfer: Rs ";
-    cin >> amount;
+    while (!(cin >> amount) || amount <= 0) {
+        setConsoleColor(12);
+        cout << "\n\tInvalid amount. Please enter a positive number: Rs ";
+        setConsoleColor(7);
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
 
     float from_balance = stof(from_account->balance);
     if (amount > from_balance)
     {
-        setColor(12);
-        cout << "\n\tInsufficient Balance!";
-        setColor(7);
+        setConsoleColor(12);
+        cout << "\n\tInsufficient Balance in Sender Account!";
+        setConsoleColor(7);
     }
     else
     {
@@ -1063,583 +981,470 @@ void Bank::transfer()
         to_balance += amount;
         to_account->balance = to_string(to_balance);
 
-        // Update last transaction date for both accounts
-        time_t now = time(0);
-        string transaction_time = ctime(&now);
+        string transaction_time = getCurrentDateTime();
         from_account->last_transaction = transaction_time;
         to_account->last_transaction = transaction_time;
 
-        // Record transaction
-        string trans = "Transfer: Rs " + to_string(amount) + " from " + from_acc + " to " + to_acc;
-        transactionHistory.push_back(trans);
-        recentTransactions.push(trans);
+        string trans_sender = "Transfer Out: -Rs " + to_string(amount) + " to " + to_acc_no + " (From " + from_acc_no + ")";
+        string trans_receiver = "Transfer In: +Rs " + to_string(amount) + " from " + from_acc_no + " (To " + to_acc_no + ")";
 
-        // Update the file
-        saveAccountsToFile();
+        transactionHistory.push_back(trans_sender);
+        transactionHistory.push_back(trans_receiver);
+        recentTransactions.push(trans_sender);
+        recentTransactions.push(trans_receiver);
 
-        setColor(10);
+        saveAccountsToFile(); // Save updated balances and last transaction dates
+
+        setConsoleColor(10);
         cout << "\n\tTransfer Successful!";
-        cout << "\n\tYour New Balance: Rs " << from_account->balance;
-        setColor(7);
+        cout << "\n\tYour New Balance (Sender): Rs " << from_account->balance;
+        setConsoleColor(7);
     }
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showCustomerMenu();
 }
 
-void Bank::view_transaction_history()
+
+void Bank::viewTransactionHistory()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tTRANSACTION HISTORY\n";
 
-    if (transactionHistory.empty())
+    if (recentTransactions.empty()) // Use recentTransactions for user display
     {
-        setColor(12);
-        cout << "\n\tNo transactions have been recorded yet.";
-        setColor(7);
+        setConsoleColor(12);
+        cout << "\n\tNo recent transactions to display.";
+        setConsoleColor(7);
     }
     else
     {
-        setColor(14);
-        cout << "\n\tRecent Transactions (newest first):";
-        setColor(7);
+        setConsoleColor(14);
+        cout << "\n\tLast 10 Recent Transactions (newest first):";
+        setConsoleColor(7);
         cout << "\n\t--------------------------------------------------\n";
 
-        // Create a temporary stack to display transactions
-        stack<string> tempStack = recentTransactions;
+        stack<string> tempStack = recentTransactions; // Use a temporary stack
         int count = 0;
 
-        while (!tempStack.empty() && count < 10)
+        while (!tempStack.empty() && count < 10) // Display up to 10
         {
             cout << "\t" << tempStack.top() << "\n";
             tempStack.pop();
             count++;
         }
+        if (recentTransactions.size() > 10) {
+            cout << "\n\t(More transactions available, showing last 10)";
+        }
     }
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showCustomerMenu();
 }
 
-void Bank::request_service()
+
+void Bank::submitServiceRequest()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tREQUEST CUSTOMER SERVICE\n";
 
-    string acc_no, request;
+    string acc_no, request_description;
     cout << "\n\tEnter Your Account Number: ";
     cin >> acc_no;
 
     AccountNode *account = search(root, acc_no);
     if (account == nullptr)
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tAccount Doesn't Exist!";
-        setColor(7);
+        setConsoleColor(7);
     }
     else
     {
+        int service_choice;
         cout << "\n\tSelect service type:";
         cout << "\n\t1. Technical Issue";
         cout << "\n\t2. Account Query";
         cout << "\n\t3. Loan Information";
         cout << "\n\t4. Other";
         cout << "\n\tChoice: ";
+        while (!(cin >> service_choice) || (service_choice < 1 || service_choice > 4)) {
+            setConsoleColor(12);
+            cout << "\n\tInvalid choice. Please enter a number between 1 and 4: ";
+            setConsoleColor(7);
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+        cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear buffer before getline
 
-        int choice;
-        cin >> choice;
-
-        string service_type;
-        switch (choice)
+        string service_type_str;
+        switch (service_choice)
         {
-        case 1:
-            service_type = "Technical Issue";
-            break;
-        case 2:
-            service_type = "Account Query";
-            break;
-        case 3:
-            service_type = "Loan Information";
-            break;
-        default:
-            service_type = "Other";
-            break;
+        case 1: service_type_str = "Technical Issue"; break;
+        case 2: service_type_str = "Account Query";   break;
+        case 3: service_type_str = "Loan Information"; break;
+        case 4:
+        default: service_type_str = "Other"; break;
         }
 
         cout << "\n\tPlease describe your request (single line): ";
-        cin.ignore();
-        getline(cin, request);
+        getline(cin, request_description);
 
-        // Add to queue
-        string service_request = acc_no + " - " + account->name + " - " + service_type + ": " + request;
-        serviceQueue.push(service_request);
+        string service_request_string = getCurrentDateTime() + " | Account: " + acc_no + " | Name: " + account->name + " | Type: " + service_type_str + " | Desc: " + request_description;
+        serviceQueue.push(service_request_string);
 
-        setColor(10);
+        setConsoleColor(10);
         cout << "\n\tYour service request has been queued!";
         cout << "\n\tCurrent queue position: " << serviceQueue.size();
-        setColor(7);
+        setConsoleColor(7);
     }
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_c();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_c();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showCustomerMenu();
 }
 
-void Bank::process_service_queue()
+
+void Bank::manageServiceQueue()
 {
-    displayTitle();
+    displayAppTitle();
     cout << "\n\t\tSERVICE QUEUE MANAGEMENT\n";
 
     if (serviceQueue.empty())
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tNo pending service requests.";
-        setColor(7);
+        setConsoleColor(7);
     }
     else
     {
-        setColor(14);
+        setConsoleColor(14);
         cout << "\n\tPending Service Requests: " << serviceQueue.size();
-        setColor(7);
+        setConsoleColor(7);
         cout << "\n\t--------------------------------------------------\n";
         cout << "\n\tNext in queue: " << serviceQueue.front();
 
+        int queue_action_choice;
         cout << "\n\n\tWhat would you like to do?";
         cout << "\n\t1. Process Next Request";
-        cout << "\n\t2. View All Requests";
-        cout << "\n\t3. Return to Menu";
+        cout << "\n\t2. View All Requests in Queue";
+        cout << "\n\t3. Return to Employee Menu";
         cout << "\n\tChoice: ";
+        while (!(cin >> queue_action_choice) || (queue_action_choice < 1 || queue_action_choice > 3)) {
+            setConsoleColor(12);
+            cout << "\n\tInvalid choice. Please enter 1, 2, or 3: ";
+            setConsoleColor(7);
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
 
-        int choice;
-        cin >> choice;
-
-        if (choice == 1)
+        if (queue_action_choice == 1)
         {
             cout << "\n\tProcessing request: " << serviceQueue.front();
             serviceQueue.pop();
-            setColor(10);
+            setConsoleColor(10);
             cout << "\n\tRequest processed successfully!";
-            setColor(7);
+            setConsoleColor(7);
             cout << "\n\tRemaining requests: " << serviceQueue.size();
+            cout << "\n\n\tPress any key to continue...";
+            _getch();
+            manageServiceQueue(); // Recurse to process more or return
         }
-        else if (choice == 2)
+        else if (queue_action_choice == 2)
         {
             queue<string> tempQueue = serviceQueue;
             int count = 1;
 
-            cout << "\n\tAll pending requests:";
+            cout << "\n\n\tAll pending requests:";
             while (!tempQueue.empty())
             {
                 cout << "\n\t" << count << ". " << tempQueue.front();
                 tempQueue.pop();
                 count++;
             }
+            cout << "\n\n\tPress any key to return...";
+            _getch();
+            manageServiceQueue(); // Return to queue options
         }
     }
 
-    int choice;
-    cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-    cin >> choice;
-
-    if (choice == 1)
-    {
-        displayLoadingScreen();
-        main();
-    }
-    else if (choice == 0)
-    {
-        close();
-    }
-    else if (choice == 2)
-    {
-        menu_e();
-    }
-    else
-    {
-        cout << "\n\tInvalid Choice!";
-        fordelay(100000000);
-        menu_e();
-    }
+    cout << "\n\n\tPress any key to return to menu...";
+    _getch();
+    showEmployeeMenu(); // Always return to employee menu from here
 }
 
-// Menu Functions
-void menu_c()
-{
-    Bank bank;
 
-    displayTitle();
-    setColor(14);
+// --- Menu Functions Implementation ---
+
+// Customer Menu
+void showCustomerMenu()
+{
+    Bank bank_operations; // Create a Bank object to access its methods
+
+    displayAppTitle();
+    setConsoleColor(14); // Yellow
     cout << "\n\t\tCUSTOMER MENU\n";
-    setColor(7);
+    setConsoleColor(7); // White
     cout << "\n\t1. Create New Account";
-    cout << "\n\t2. Search Account";
-    cout << "\n\t3. Deposit/Withdraw";
-    cout << "\n\t4. Modify Account";
-    cout << "\n\t5. Fund Transfer";
-    cout << "\n\t6. Transaction History";
+    cout << "\n\t2. Search My Account";
+    cout << "\n\t3. Deposit/Withdraw Funds";
+    cout << "\n\t4. Modify My Account Details";
+    cout << "\n\t5. Transfer Funds";
+    cout << "\n\t6. View Transaction History";
     cout << "\n\t7. Request Customer Service";
     cout << "\n\t8. Log Out";
-    cout << "\n\t0. Exit";
+    cout << "\n\t0. Exit Application";
     cout << "\n\n\tEnter your choice: ";
 
     int choice;
     cin >> choice;
 
+    // Clear the input buffer
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
     switch (choice)
     {
-    case 1:
-        bank.acc_write();
-        break;
-    case 2:
-        bank.search_rec();
-        break;
-    case 3:
-        bank.deposit_withdraw();
-        break;
-    case 4:
-        bank.modify_account();
-        break;
-    case 5:
-        bank.transfer();
-        break;
-    case 6:
-        bank.view_transaction_history();
-        break;
-    case 7:
-        bank.request_service();
-        break;
-    case 8:
-        displayLoadingScreen();
-        main();
-        break;
-    case 0:
-        close();
-        break;
+    case 1: bank_operations.createNewAccount(); break;
+    case 2: bank_operations.searchAccountRecord(); break;
+    case 3: bank_operations.handleDepositWithdrawal(); break;
+    case 4: bank_operations.modifyAccountDetails(); break;
+    case 5: bank_operations.performFundTransfer(); break;
+    case 6: bank_operations.viewTransactionHistory(); break;
+    case 7: bank_operations.submitServiceRequest(); break;
+    case 8: showLoadingScreen(); main(); break; // Log out returns to main menu
+    case 0: close_application(); break;
     default:
-        cout << "\n\tInvalid choice!";
-        fordelay(100000000);
-        menu_c();
+        setConsoleColor(12);
+        cout << "\n\tInvalid choice! Please try again.";
+        setConsoleColor(7);
+        fordelay(1500); // Wait 1.5 seconds
+        showCustomerMenu(); // Recursive call to show menu again
     }
 }
 
-void menu_e()
+// Employee Menu
+void showEmployeeMenu()
 {
-    Bank bank;
+    Bank bank_operations; // Create a Bank object to access its methods
 
-    displayTitle();
-    setColor(14);
+    displayAppTitle();
+    setConsoleColor(14); // Yellow
     cout << "\n\t\tEMPLOYEE MENU\n";
-    setColor(7);
-    cout << "\n\t1. Create Customer Account";
+    setConsoleColor(7); // White
+    cout << "\n\t1. Create New Customer Account";
     cout << "\n\t2. Search Customer Account";
-    cout << "\n\t3. Modify Account";
-    cout << "\n\t4. View All Accounts";
-    cout << "\n\t5. Process Service Requests";
-    cout << "\n\t6. Add Employee Account";
+    cout << "\n\t3. Modify Customer Account Details";
+    cout << "\n\t4. View All Bank Accounts";
+    cout << "\n\t5. Process Customer Service Requests";
+    cout << "\n\t6. Add New Employee Account";
     cout << "\n\t7. Log Out";
-    cout << "\n\t0. Exit";
+    cout << "\n\t0. Exit Application";
     cout << "\n\n\tEnter your choice: ";
 
     int choice;
     cin >> choice;
 
+    // Clear the input buffer
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
     switch (choice)
     {
-    case 1:
-        bank.acc_write();
-        break;
-    case 2:
-        bank.search_rec();
-        break;
-    case 3:
-        bank.modify_account();
-        break;
-    case 4:
-        bank.display_all();
-        break;
-    case 5:
-        bank.process_service_queue();
-        break;
+    case 1: bank_operations.createNewAccount(); break; // Employee can also create accounts
+    case 2: bank_operations.searchAccountRecord(); break;
+    case 3: bank_operations.modifyAccountDetails(); break;
+    case 4: bank_operations.displayAllAccounts(); break;
+    case 5: bank_operations.manageServiceQueue(); break;
     case 6:
-        // Add Employee Account
         {
-            displayTitle();
-            cout << "\n\t\tADD EMPLOYEE ACCOUNT\n";
+            displayAppTitle();
+            cout << "\n\t\tADD NEW EMPLOYEE ACCOUNT\n";
 
             string emp_id, password;
-            cout << "\n\tEnter Employee ID: ";
+            cout << "\n\tEnter New Employee ID: ";
             cin >> emp_id;
 
-            if (employeeCredentials.find(emp_id) != employeeCredentials.end())
+            if (employeeCredentials.count(emp_id)) // Use .count() for map
             {
-                setColor(12);
-                cout << "\n\tEmployee ID already exists!";
-                setColor(7);
+                setConsoleColor(12);
+                cout << "\n\tError: Employee ID '" << emp_id << "' already exists!";
+                setConsoleColor(7);
             }
             else
             {
-                cout << "\n\tEnter Password: ";
-                cin >> password;
+                cout << "\n\tEnter Password for New Employee: ";
+                password = getSecurePasswordInput();
 
-                employeeCredentials[emp_id] = password;
-                saveCredentials();
+                employeeCredentials[emp_id] = password; // Add to map
+                saveAllCredentials(); // Save updated employee credentials
 
-                setColor(10);
-                cout << "\n\tEmployee account created successfully!";
-                setColor(7);
+                setConsoleColor(10);
+                cout << "\n\tEmployee account '" << emp_id << "' created successfully!";
+                setConsoleColor(7);
             }
-
-            int choice;
-            cout << "\n\n\t1. Main Menu\n\t2. Previous Menu\n\t0. Exit\n\tChoice: ";
-            cin >> choice;
-
-            if (choice == 1)
-            {
-                displayLoadingScreen();
-                main();
-            }
-            else if (choice == 0)
-            {
-                close();
-            }
-            else
-            {
-                menu_e();
-            }
+            cout << "\n\n\tPress any key to return to menu...";
+            _getch();
+            showEmployeeMenu(); // Return to employee menu
         }
         break;
-    case 7:
-        displayLoadingScreen();
-        main();
-        break;
-    case 0:
-        close();
-        break;
+    case 7: showLoadingScreen(); main(); break; // Log out
+    case 0: close_application(); break;
     default:
-        cout << "\n\tInvalid choice!";
-        fordelay(100000000);
-        menu_e();
+        setConsoleColor(12);
+        cout << "\n\tInvalid choice! Please try again.";
+        setConsoleColor(7);
+        fordelay(1500); // Wait 1.5 seconds
+        showEmployeeMenu(); // Recursive call
     }
 }
 
-void employee()
+// Employee Login function
+void employeeLogin()
 {
     system("cls");
-    displayTitle();
+    displayAppTitle();
 
     string emp_id, password;
     cout << "\n\t\tEMPLOYEE LOGIN\n";
     cout << "\n\tEnter Employee ID: ";
     cin >> emp_id;
     cout << "\n\tEnter Password: ";
-    password = getPasswordInput();
+    password = getSecurePasswordInput();
 
-    if (employeeCredentials.find(emp_id) != employeeCredentials.end() &&
-        employeeCredentials[emp_id] == password)
+    if (employeeCredentials.count(emp_id) && employeeCredentials[emp_id] == password)
     {
-        setColor(10);
+        setConsoleColor(10);
         cout << "\n\tLogin Successful! Welcome, " << emp_id << "!";
-        setColor(7);
-        fordelay(100000000);
-        menu_e();
+        setConsoleColor(7);
+        fordelay(1000); // Shorter delay
+        showEmployeeMenu(); // Go to employee menu
     }
     else
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tInvalid Employee ID or Password!";
-        setColor(7);
+        setConsoleColor(7);
 
         int choice;
         cout << "\n\n\t1. Try Again\n\t2. Main Menu\n\t0. Exit\n\tChoice: ";
         cin >> choice;
 
-        if (choice == 1)
-        {
-            employee();
-        }
-        else if (choice == 0)
-        {
-            close();
-        }
-        else
-        {
-            main();
+        if (choice == 1) {
+            employeeLogin();
+        } else if (choice == 0) {
+            close_application();
+        } else {
+            main(); // Return to main menu
         }
     }
 }
 
-void customer()
+// Customer Login function
+void customerLogin()
 {
     system("cls");
-    displayTitle();
+    displayAppTitle();
 
     string acc_no, password;
     cout << "\n\t\tCUSTOMER LOGIN\n";
     cout << "\n\tEnter Account Number: ";
     cin >> acc_no;
     cout << "\n\tEnter Password: ";
-    password = getPasswordInput();
+    password = getSecurePasswordInput();
 
-    if (accountCredentials.find(acc_no) != accountCredentials.end() &&
-        accountCredentials[acc_no] == password)
+    if (accountCredentials.count(acc_no) && accountCredentials[acc_no] == password)
     {
-        setColor(10);
+        setConsoleColor(10);
         cout << "\n\tLogin Successful!";
-        setColor(7);
-        fordelay(100000000);
-        menu_c();
+        setConsoleColor(7);
+        fordelay(1000); // Shorter delay
+        showCustomerMenu(); // Go to customer menu
     }
     else
     {
-        setColor(12);
+        setConsoleColor(12);
         cout << "\n\tInvalid Account Number or Password!";
-        setColor(7);
+        setConsoleColor(7);
 
         int choice;
         cout << "\n\n\t1. Try Again\n\t2. Main Menu\n\t0. Exit\n\tChoice: ";
         cin >> choice;
 
-        if (choice == 1)
-        {
-            customer();
-        }
-        else if (choice == 0)
-        {
-            close();
-        }
-        else
-        {
-            main();
+        if (choice == 1) {
+            customerLogin();
+        } else if (choice == 0) {
+            close_application();
+        } else {
+            main(); // Return to main menu
         }
     }
 }
 
+// Main function - entry point of the application
 int main()
 {
-    // Load credentials at startup
-    loadCredentials();
+    // Load credentials and account data at startup
+    loadAllCredentials();
+    srand(time(0)); // Seed random number generator
 
-    // Set random seed
-    srand(time(0));
+    showLoadingScreen();
+    displayAppTitle(); // Display main title after loading
 
-    // Display welcome screen
-    displayLoadingScreen();
-    displayTitle();
+    setConsoleColor(14); // Yellow color for welcome message
+    cout << "\n\t\tWELCOME TO THE BANKING SYSTEM\n"; // Generic welcome message
+    setConsoleColor(7); // White color
 
     cout << "\n\t1. Login";
     cout << "\n\t2. Instructions";
     cout << "\n\t0. Exit";
     cout << "\n\n\tEnter your choice: ";
 
-    int choice;
-    cin >> choice;
+    int main_choice;
+    while (!(cin >> main_choice) || (main_choice < 0 || main_choice > 2)) {
+        setConsoleColor(12);
+        cout << "\n\tInvalid choice. Please enter 1, 2, or 0: ";
+        setConsoleColor(7);
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear buffer for subsequent inputs
 
-    switch (choice)
+    switch (main_choice)
     {
     case 1:
-        loginPage();
-        int login_choice;
-        cin >> login_choice;
-
-        switch (login_choice)
-        {
-        case 1:
-            employee();
-            break;
-        case 2:
-            customer();
-            break;
-        case 3:
-        {
-            Bank bank;
-            bank.read_data();
+        showLoginPage();
+        int login_type_choice;
+        while (!(cin >> login_type_choice) || (login_type_choice < 1 || login_type_choice > 5)) {
+            setConsoleColor(12);
+            cout << "\n\tInvalid choice. Please enter a number between 1 and 5: ";
+            setConsoleColor(7);
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
-        break;
-        case 4:
-            main();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n'); // Clear buffer
+
+        switch (login_type_choice)
+        {
+        case 1: employeeLogin(); break;
+        case 2: customerLogin(); break;
+        case 3:
+            {
+                Bank bank_obj_for_signup; // Temporary object for new account creation
+                bank_obj_for_signup.createNewAccount();
+            }
             break;
-        case 5:
-            close();
-            break;
-        default:
-            cout << "\n\tInvalid choice!";
-            fordelay(100000000);
-            main();
+        case 4: main(); break; // Return to main menu
+        case 5: close_application(); break;
         }
         break;
     case 2:
-        displayInstructions();
-        main();
+        showInstructions();
+        main(); // Return to main menu after showing instructions
         break;
     case 0:
-        close();
+        close_application();
         break;
-    default:
-        cout << "\n\tInvalid choice!";
-        fordelay(100000000);
-        main();
     }
 
     return 0;
