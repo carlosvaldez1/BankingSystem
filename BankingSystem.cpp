@@ -1588,9 +1588,6 @@ int main()
     displayLoadingScreen();
     displayTitle();
 
-    setColor(14);
-    cout << "\n\t\tWELCOME TO STATE BANK OF INDIA\n";
-    setColor(7);
     cout << "\n\t1. Login";
     cout << "\n\t2. Instructions";
     cout << "\n\t0. Exit";
