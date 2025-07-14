@@ -1,3 +1,20 @@
+How to Run the Code
+Prerequisites: Ensure you have a C++ compiler (like g++ or Visual Studio) installed.
+
+Clone or Download: Get the project files by cloning the repository or downloading the ZIP.
+
+Navigate: Open your terminal/command prompt and cd into the project directory.
+
+Compile: Compile BankSystem.cpp using your C++ compiler.
+
+Example (g++): g++ BankSystem.cpp -o BankSystem.exe
+
+Data Files: Ensure Account_info.csv, Employee_info.csv, and Bank_Record.csv are in the same directory as the compiled executable.
+
+Run: Execute the compiled program.
+
+Example (Windows): ./BankSystem.exe
+
 🏦 Banking System
 A compact C++ application that simulates essential banking functions via a smart, text-based interface. Designed to be fast, intuitive, and modular — perfect for learning or extending with your own features.
 
