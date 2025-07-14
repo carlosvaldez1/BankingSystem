@@ -216,7 +216,7 @@ void displayTitle()
     setColor(11);
     cout << "\n\n\t\t*********************************************";
     cout << "\n\t\t*                                           *";
-    cout << "\n\t\t*       STATE BANK OF INDIA - ATM SYSTEM    *";
+    cout << "\n\t\t*       WELCOME TO THE BANKING SYSTEM       *";
     cout << "\n\t\t*                                           *";
     cout << "\n\t\t*********************************************\n\n";
     setColor(7);
